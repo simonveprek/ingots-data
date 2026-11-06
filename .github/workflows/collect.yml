@@ -19,6 +19,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: python3 collect.py
+      - run: python3 backfill.py
+        env:
+          GOLD_API_KEY: ${{ secrets.GOLD_API_KEY }}
       - name: commit
         run: |
           git config user.name "ingots-bot"
