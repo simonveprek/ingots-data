@@ -57,8 +57,13 @@ def update(symbol, name):
     doc["intraday"] = [p for p in intraday if p[0] >= cutoff]
 
     day = ts - ts % 86400
+    weekend = datetime.fromtimestamp(day, timezone.utc).weekday() >= 5
+    if weekend and symbol not in ("BTC", "ETH"):
+        day = None  # kovy se o víkendu neobchodují
     daily = doc["daily"]
-    if daily and daily[-1][0] == day:
+    if day is None:
+        pass
+    elif daily and daily[-1][0] == day:
         if daily[-1][1] != price:
             daily[-1][1] = price
             changed = True

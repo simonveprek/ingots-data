@@ -37,6 +37,24 @@ def day_ts(value):
     return int(datetime.fromisoformat(str(value)[:10]).replace(tzinfo=timezone.utc).timestamp())
 
 
+CRYPTO = {"BTC", "ETH"}
+
+
+def clean(symbol, rows):
+    """Drop weekends (metals don't trade) and one-day glitches that jump and return."""
+    if symbol not in CRYPTO:
+        rows = [r for r in rows if datetime.fromtimestamp(r[0], timezone.utc).weekday() < 5]
+    out = []
+    for i, row in enumerate(rows):
+        if 0 < i < len(rows) - 1:
+            prev, nxt = rows[i - 1][1], rows[i + 1][1]
+            spike = abs(row[1] / prev - 1) > 0.06 and abs(row[1] / nxt - 1) > 0.06
+            if spike and abs(nxt / prev - 1) < 0.03:
+                continue
+        out.append(row)
+    return out
+
+
 def main():
     key = os.environ.get("GOLD_API_KEY", "").strip()
     if not key:
@@ -67,7 +85,7 @@ def main():
         for ts, price in doc.get("daily", []):
             if ts >= today or ts not in merged:
                 merged[ts] = price
-        doc["daily"] = [[ts, merged[ts]] for ts in sorted(merged)]
+        doc["daily"] = clean(symbol, [[ts, merged[ts]] for ts in sorted(merged)])
         path.write_text(json.dumps(doc, separators=(",", ":")))
         report[symbol] = f"{len(rows)} days"
         time.sleep(2)
