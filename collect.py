@@ -22,16 +22,27 @@ INTRADAY_DAYS = 35
 HEADERS = {"User-Agent": "ingots-data-collector/1.0 (+https://github.com/simonveprek/ingots-data)"}
 
 
+# Výpadky sítě/DNS na runneru bývají krátké – zkoušíme déle s rostoucí pauzou.
+RETRY_DELAYS = [5, 15, 30, 60]
+# Záloha, když nejde stáhnout seznam symbolů.
+FALLBACK_SYMBOLS = [
+    {"symbol": "XAU", "name": "Gold"}, {"symbol": "XAG", "name": "Silver"},
+    {"symbol": "XPT", "name": "Platinum"}, {"symbol": "XPD", "name": "Palladium"},
+    {"symbol": "HG", "name": "Copper"}, {"symbol": "BTC", "name": "Bitcoin"},
+    {"symbol": "ETH", "name": "Ethereum"},
+]
+
+
 def get(path):
-    for attempt in range(3):
+    for attempt, delay in enumerate([0] + RETRY_DELAYS):
+        time.sleep(delay)
         try:
             req = urllib.request.Request(API + path, headers=HEADERS)
             with urllib.request.urlopen(req, timeout=20) as r:
                 return json.load(r)
         except Exception as e:  # noqa: BLE001
-            if attempt == 2:
-                raise
-            time.sleep(3)
+            print(f"{path}: attempt {attempt + 1} failed: {e}")
+    raise RuntimeError(f"{path}: all attempts failed")
 
 
 def load(path):
@@ -79,7 +90,11 @@ def update(symbol, name):
 
 def main():
     DATA.mkdir(exist_ok=True)
-    symbols = get("/symbols")
+    try:
+        symbols = get("/symbols")
+    except Exception as e:  # noqa: BLE001
+        print(f"symbols: {e} – using fallback list")
+        symbols = FALLBACK_SYMBOLS
     updated = []
     for s in symbols:
         try:

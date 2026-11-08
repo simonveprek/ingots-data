@@ -1,8 +1,11 @@
 name: collect prices
 
+# GitHub plánované běhy výrazně zdržuje (místo 15 min klidně hodiny), proto jeden běh
+# sbírá ve smyčce každých 15 minut skoro 6 hodin. Další plánovaný běh čeká ve frontě
+# (concurrency) a naváže, takže sběr jede bez mezer. Veřejný repozitář = minuty zdarma.
 on:
   schedule:
-    - cron: "*/15 * * * *"
+    - cron: "*/30 * * * *"
   workflow_dispatch:
 
 permissions:
@@ -15,18 +18,24 @@ concurrency:
 jobs:
   collect:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 355
     steps:
       - uses: actions/checkout@v4
-      - run: python3 collect.py
-      - run: python3 backfill.py
+      - name: collect every 15 minutes
         env:
           GOLD_API_KEY: ${{ secrets.GOLD_API_KEY }}
-      - name: commit
         run: |
           git config user.name "ingots-bot"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add data
-          git diff --cached --quiet && exit 0
-          git commit -m "prices $(date -u +%Y-%m-%dT%H:%MZ)"
-          git push
+          end=$((SECONDS + 5 * 3600 + 40 * 60))
+          python3 backfill.py || echo "::warning::backfill failed"
+          while true; do
+            python3 collect.py || echo "::warning::collect failed"
+            git add data
+            if ! git diff --cached --quiet; then
+              git commit -q -m "prices $(date -u +%Y-%m-%dT%H:%MZ)"
+              git pull -q --rebase && git push -q || echo "::warning::push failed"
+            fi
+            [ "$SECONDS" -ge "$end" ] && break
+            sleep 900
+          done
